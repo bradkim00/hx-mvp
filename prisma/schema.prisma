@@ -1,0 +1,262 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  dob           DateTime?
+  locationCity  String?
+  locationLat   Float?
+  locationLng   Float?
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  checkins      Checkin[]
+  posts         Post[]
+  comments      Comment[]
+  reactions     Reaction[]
+  following     Follow[]   @relation("UserFollows")
+  followers     Follow[]   @relation("UserFollowers")
+  favoriteTeams FavoriteTeam[]
+  userBadges    UserBadge[]
+  settings      Settings?
+  
+  @@map("users")
+}
+
+model Team {
+  id       String @id @default(cuid())
+  league   String // MLB, NBA, NFL, etc.
+  name     String
+  city     String
+  abbrev   String @unique
+  
+  // Relations
+  homeGames Game[] @relation("HomeTeam")
+  awayGames Game[] @relation("AwayTeam")
+  stadiums Stadium[]
+  players  Player[]
+  favoriteTeams FavoriteTeam[]
+  
+  @@map("teams")
+}
+
+model Stadium {
+  id       String @id @default(cuid())
+  name     String
+  teamId   String?
+  city     String
+  lat      Float
+  lng      Float
+  
+  // Relations
+  team     Team?  @relation(fields: [teamId], references: [id])
+  games    Game[]
+  
+  @@map("stadiums")
+}
+
+model Game {
+  id             String   @id @default(cuid())
+  league         String
+  dateUTC        DateTime
+  homeTeamId     String
+  awayTeamId     String
+  stadiumId      String?
+  finalHomeScore Int?
+  finalAwayScore Int?
+  status         GameStatus @default(SCHEDULED)
+  
+  // Relations
+  homeTeam       Team     @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam       Team     @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  stadium        Stadium? @relation(fields: [stadiumId], references: [id])
+  checkins       Checkin[]
+  posts          Post[]
+  performances   Performance[]
+  
+  @@map("games")
+}
+
+model Checkin {
+  id             String   @id @default(cuid())
+  userId         String
+  gameId         String
+  method         CheckinMethod
+  verified       Boolean  @default(false)
+  ticketImageUrl String?
+  seatText       String?
+  createdAt      DateTime @default(now())
+  
+  // Relations
+  user           User     @relation(fields: [userId], references: [id])
+  game           Game     @relation(fields: [gameId], references: [id])
+  
+  @@map("checkins")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  userId    String
+  gameId    String?
+  caption   String
+  mediaUrls String[] // JSON array of URLs
+  createdAt DateTime @default(now())
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id])
+  game      Game?    @relation(fields: [gameId], references: [id])
+  comments  Comment[]
+  reactions Reaction[]
+  
+  @@map("posts")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+  
+  // Relations
+  post      Post     @relation(fields: [postId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  
+  @@map("comments")
+}
+
+model Reaction {
+  id     String @id @default(cuid())
+  postId String
+  userId String
+  type   ReactionType
+  
+  // Relations
+  post   Post   @relation(fields: [postId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  
+  @@unique([postId, userId, type])
+  @@map("reactions")
+}
+
+model Follow {
+  followerId  String   @id
+  followeeId  String   @id
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  follower    User     @relation("UserFollows", fields: [followerId], references: [id])
+  followee    User     @relation("UserFollowers", fields: [followeeId], references: [id])
+  
+  @@id([followerId, followeeId])
+  @@map("follows")
+}
+
+model FavoriteTeam {
+  id     String @id @default(cuid())
+  userId String
+  teamId String
+  
+  // Relations
+  user   User   @relation(fields: [userId], references: [id])
+  team   Team   @relation(fields: [teamId], references: [id])
+  
+  @@unique([userId, teamId])
+  @@map("favorite_teams")
+}
+
+model Player {
+  id       String @id @default(cuid())
+  teamId   String?
+  name     String
+  
+  // Relations
+  team     Team?  @relation(fields: [teamId], references: [id])
+  performances Performance[]
+  
+  @@map("players")
+}
+
+model Performance {
+  id         String @id @default(cuid())
+  gameId     String
+  playerId   String
+  perfScore  Float?
+  
+  // Relations
+  game       Game   @relation(fields: [gameId], references: [id])
+  player     Player @relation(fields: [playerId], references: [id])
+  
+  @@map("performances")
+}
+
+model Badge {
+  id     String @id @default(cuid())
+  slug   String @unique
+  name   String
+  rarity BadgeRarity
+  
+  // Relations
+  userBadges UserBadge[]
+  
+  @@map("badges")
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+  reason   String?
+  
+  // Relations
+  user     User   @relation(fields: [userId], references: [id])
+  badge    Badge  @relation(fields: [badgeId], references: [id])
+  
+  @@map("user_badges")
+}
+
+model Settings {
+  userId        String @id
+  shareAutoImage Boolean @default(true)
+  
+  // Relations
+  user          User   @relation(fields: [userId], references: [id])
+  
+  @@map("settings")
+}
+
+enum GameStatus {
+  SCHEDULED
+  FINAL
+  CUSTOM
+}
+
+enum CheckinMethod {
+  TICKET
+  MANUAL
+  QR_CODE
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  FIRE
+}
+
+enum BadgeRarity {
+  SILVER
+  GOLD
+  PLATINUM
+}
